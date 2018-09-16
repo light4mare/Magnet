@@ -4,6 +4,8 @@ import android.text.Editable
 import android.text.TextWatcher
 import android.view.View
 import android.widget.*
+import svc.magnet.annotation.Block
+import svc.magnet.annotation.MagnetNode
 import java.lang.reflect.Field
 
 fun View.bindClick(magnet: Magnet<Int>): View {
@@ -90,6 +92,18 @@ fun <T : Any> TextView.bind(magnet: Magnet<T>, key: String): TextView {
     }
 
     return this
+}
+
+fun <T : MagnetNode<T>> TextView.bind(magnet: NodeMagnet<T>, vararg key: String) {
+    magnet.observe<String>(*key) {
+        text = it
+    }
+}
+
+fun <T : MagnetNode<T>, V: Any> TextView.bind(magnet: NodeMagnet<T>, vararg key: String, block: (t: V) -> String) {
+    magnet.observe<V>(*key) {
+        text = block(it)
+    }
 }
 
 fun ProgressBar.bind(magnet: Magnet<Int>): ProgressBar {
