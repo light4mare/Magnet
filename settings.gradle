@@ -1,0 +1,4 @@
+include ':app'
+include ':magnet'
+include ':magnet-annotation'
+include ':magnet-compiler'

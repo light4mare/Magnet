@@ -1,0 +1,15 @@
+apply plugin: 'java-library'
+apply plugin: 'kotlin-kapt'
+apply plugin: 'kotlin'
+
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation project(':magnet-annotation')
+    implementation 'com.google.auto.service:auto-service:1.0-rc4'//谷歌的帮助我们快速实现注解处理器
+    kapt "com.google.auto.service:auto-service:1.0-rc4"
+    implementation 'com.squareup:kotlinpoet:1.0.0-RC1'
+    implementation 'com.google.code.gson:gson:2.8.2'
+}
+
+sourceCompatibility = "1.7"
+targetCompatibility = "1.7"
