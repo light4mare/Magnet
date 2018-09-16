@@ -149,6 +149,24 @@ class SourceProcessor : AbstractProcessor() {
         return funSpec.build()
     }
 
+    /**
+     * 考虑到有些类原来有注解，例如ROOM数据库注解
+     * 不方便把注解直接搬过来，magnet属性不需要存入数据库等
+     * 做一个转换功能，这个功能可以放在 @Source 中做一个变量控制是否需要转换
+     */
+    private fun buildFromFun() {
+
+    }
+
+    /**
+     * 考虑到有些类原来有注解，例如ROOM数据库注解
+     * 不方便把注解直接搬过来，magnet属性不需要存入数据库等
+     * 做一个转换功能，这个功能可以放在 @Source 中做一个变量控制是否需要转换
+     */
+    private fun buildBackFun() {
+
+    }
+
     private fun buildPropertyOrigin(element: Element): PropertySpec {
         val name = element.simpleName.toString()
         val fieldType = element.asType().asTypeName().asNullable()
@@ -215,7 +233,7 @@ class SourceProcessor : AbstractProcessor() {
         return typeSpec.build()
     }
 
-    private fun buildPropertyTypeAlias(clazz: Element, property: Element): TypeAliasSpec{
+    private fun buildPropertyTypeAlias(clazz: Element, property: Element): TypeAliasSpec {
         val aliasName = getSourceName(clazz).plus("_".plus(humpToUnderline(property))).toUpperCase()
         val fieldType = property.asType().asTypeName()
         val type = if (isJavaTypeString(fieldType)) {
@@ -247,7 +265,7 @@ class SourceProcessor : AbstractProcessor() {
         return sourceList.contains(element.asType().asTypeName().toString())
     }
 
-    private fun getPackageName(element: Element): String{
+    private fun getPackageName(element: Element): String {
         return element.asType().asTypeName().toString().replace(".".plus(element.simpleName.toString()), "")
     }
 
