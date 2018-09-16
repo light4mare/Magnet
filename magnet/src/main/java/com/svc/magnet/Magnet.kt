@@ -5,12 +5,12 @@ import io.reactivex.subjects.PublishSubject
 /**
  * 通过内置监听器实现双向绑定
  */
-class Magnet<T : Any> {
+open class Magnet<T : Any> {
     private var value: T? = null
 
-    private val subject = PublishSubject.create<T>()
+    protected val subject = PublishSubject.create<T>()
 
-    fun value(t: T?, check: Boolean = false) {
+    open fun value(t: T?, check: Boolean = false) {
         if (check && value == t) return
 
         t?.let {

@@ -2,6 +2,7 @@ package svc.magnet
 
 import android.support.v7.app.AppCompatActivity
 import android.os.Bundle
+import android.util.Log
 import android.view.View
 import com.svc.magnet.NodeMagnet
 import kotlinx.android.synthetic.main.activity_main.*
@@ -19,7 +20,7 @@ class MainActivity : AppCompatActivity() {
         bind()
     }
 
-    private fun bind(){
+    private fun bind() {
         nodeMagnet.observe<OUTERSOURCE_INNER>(OuterSource.INNER) {
             textObject.text = "Inner: $it"
         }
@@ -28,10 +29,14 @@ class MainActivity : AppCompatActivity() {
         }
         nodeMagnet.observe<INNERSOURCE_NAME>(OuterSource.INNER, InnerSource.NAME) {
             textName.text = "name: $it"
+        }.map {
+            it.account?.apply { } ?: ""
+        }.observe {
+            Log.e("map", "map: $it")
         }
     }
 
-    public fun onClick(view: View){
+    public fun onClick(view: View) {
         val outer = OuterSource()
         outer.inner = InnerSource()
         outer.account = random.nextInt(100).toString()
