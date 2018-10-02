@@ -1,6 +1,5 @@
 package svc.magnet.annotation
 
-@Target(AnnotationTarget.CLASS)
+@Target(AnnotationTarget.FIELD)
 @Retention(AnnotationRetention.SOURCE)
-annotation class Source(
-)
+annotation class Ignore {}

@@ -3,8 +3,6 @@ package svc.magnet.compiler
 import com.google.auto.service.AutoService
 import com.google.gson.Gson
 import com.squareup.kotlinpoet.*
-import svc.magnet.annotation.MagnetNode
-import svc.magnet.annotation.Source
 import java.io.File
 import javax.annotation.processing.*
 import javax.lang.model.SourceVersion
@@ -12,7 +10,7 @@ import javax.lang.model.element.*
 import javax.lang.model.util.Elements
 import javax.lang.model.util.Types
 import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
-import svc.magnet.annotation.Block
+import svc.magnet.annotation.*
 import javax.tools.Diagnostic
 
 @AutoService(Processor::class)
@@ -23,6 +21,15 @@ class SourceProcessor : AbstractProcessor() {
     companion object {
         private const val LOG_TAG = "Magnet Compiler"
         private const val SOURCE_OPTION = "kapt.kotlin.generated"
+
+        private const val TYPE_STRING = "java.lang.String"
+        private const val TYPE_INT = "kotlin.Int"
+        private const val TYPE_FLOAT = "kotlin.Float"
+        private const val TYPE_DOUBLE = "kotlin.Double"
+        private const val TYPE_LONG = "kotlin.Long"
+        private const val TYPE_BYTE = "kotlin.Byte"
+        private const val TYPE_CHAR = "kotlin.Char"
+        private const val TYPE_BOOLEAN = "kotlin.Boolean"
     }
 
     private lateinit var mTypes: Types
@@ -38,6 +45,7 @@ class SourceProcessor : AbstractProcessor() {
         filer = env.filer
         mTypes = env.typeUtils
         elementUtils = env.elementUtils
+        messager = env.messager
     }
 
     override fun process(set: MutableSet<out TypeElement>?, roundEnv: RoundEnvironment): Boolean {
@@ -61,12 +69,13 @@ class SourceProcessor : AbstractProcessor() {
                     .addType(buildFieldCompanion(element))
                     .addFunction(buildReplaceFun(element, sourceClassName))
                     .addFunction(buildObserveFun(element))
+                    .addFunction(buildBackFun(element))
                     .addModifiers(KModifier.PUBLIC)
 
             val fileSpec = FileSpec.builder(getPackageName(element), sourceClassName)
 
             element.enclosedElements.forEach {
-                if (it.kind == ElementKind.FIELD) {
+                if (fieldShouldProcess(it)) {
                     typeSpec.addProperty(buildPropertyOrigin(it))
                     typeSpec.addProperty(buildPropertyMagnet(it))
                     fileSpec.addTypeAlias(buildPropertyTypeAlias(element, it))
@@ -102,7 +111,7 @@ class SourceProcessor : AbstractProcessor() {
                 .addParameter("source", ClassName.bestGuess(selfName))
 
         element.enclosedElements.forEach {
-            if (it.kind == ElementKind.FIELD) {
+            if (fieldShouldProcess(it)) {
                 funSpec.addStatement("%L = source.%L", it.simpleName.toString(), it.simpleName.toString())
             }
         }
@@ -123,10 +132,9 @@ class SourceProcessor : AbstractProcessor() {
         val magnetClass = ClassName.bestGuess("com.svc.magnet.Magnet")
         val nodeMagnetClass = ClassName.bestGuess("com.svc.magnet.NodeMagnet")
 
-        //==========================================================================================================
         funSpec.addStatement("when (%L[0]) {", "key")
         element.enclosedElements.forEach {
-            if (it.kind == ElementKind.FIELD) {
+            if (fieldShouldProcess(it)) {
                 funSpec.addStatement("\t%L -> {", humpToUnderline(it))
 
                 val isSource = isSource(it)
@@ -144,7 +152,6 @@ class SourceProcessor : AbstractProcessor() {
             }
         }
         funSpec.addStatement("}")
-        //==========================================================================================================
 
         return funSpec.build()
     }
@@ -152,28 +159,36 @@ class SourceProcessor : AbstractProcessor() {
     /**
      * 考虑到有些类原来有注解，例如ROOM数据库注解
      * 不方便把注解直接搬过来，magnet属性不需要存入数据库等
-     * 做一个转换功能，这个功能可以放在 @Source 中做一个变量控制是否需要转换
      */
-    private fun buildFromFun() {
+    private fun buildBackFun(element: Element): FunSpec {
+        val funSpec = FunSpec.builder("asOrigin")
+                .returns(element.asType().asTypeName())
 
-    }
+        funSpec.addStatement("val origin = %T()", element.asType())
 
-    /**
-     * 考虑到有些类原来有注解，例如ROOM数据库注解
-     * 不方便把注解直接搬过来，magnet属性不需要存入数据库等
-     * 做一个转换功能，这个功能可以放在 @Source 中做一个变量控制是否需要转换
-     */
-    private fun buildBackFun() {
+        element.enclosedElements.forEach {
+            if (fieldShouldProcess(it)) {
+                val propertyName = it.simpleName.toString()
+                if (isSource(it)) {
+                    funSpec.addStatement("%L.%L = %L?.asOrigin()", "origin", propertyName, propertyName)
+                } else {
+                    funSpec.addStatement("%L.%L = %L", "origin", propertyName, propertyName)
+                }
+            }
+        }
 
+        funSpec.addStatement("return %L", "origin")
+
+        return funSpec.build()
     }
 
     private fun buildPropertyOrigin(element: Element): PropertySpec {
         val name = element.simpleName.toString()
-        val fieldType = element.asType().asTypeName().asNullable()
+        val fieldType = element.asType().asTypeName()
         val isSource = isSource(element)
 
         val propertySpec = if (isJavaTypeString(fieldType)) {
-            PropertySpec.varBuilder(name, String::class.asTypeName().asNullable())
+            PropertySpec.varBuilder(name, String::class.asTypeName())
         } else {
             if (isSource) {
                 PropertySpec.varBuilder(name, ClassName.bestGuess(element.asType().asTypeName().toString().plus("Source")).asNullable())
@@ -183,7 +198,7 @@ class SourceProcessor : AbstractProcessor() {
         }
 
         return propertySpec.addModifiers(KModifier.PUBLIC)
-                .initializer("null")
+                .initializer(getInitValue(element))
                 .setter(FunSpec.setterBuilder()
                         .addParameter("value", fieldType)
                         .addStatement("%L = %L", "field", "value")
@@ -193,7 +208,6 @@ class SourceProcessor : AbstractProcessor() {
     }
 
     private fun buildPropertyMagnet(element: Element): PropertySpec {
-//        val magnetClass = ClassName.bestGuess("com.svc.magnet.Magnet")
         val isSource = isSource(element)
         val magnetClass = if (isSource) {
             ClassName.bestGuess("com.svc.magnet.NodeMagnet")
@@ -221,7 +235,7 @@ class SourceProcessor : AbstractProcessor() {
         val typeSpec = TypeSpec.companionObjectBuilder()
 
         element.enclosedElements.forEach {
-            if (it.kind == ElementKind.FIELD) {
+            if (fieldShouldProcess(it)) {
                 val fieldName = it.simpleName.toString()
                 val keyName = humpToUnderline(it)
                 typeSpec.addProperty(PropertySpec.builder(keyName, String::class, KModifier.PUBLIC)
@@ -250,8 +264,11 @@ class SourceProcessor : AbstractProcessor() {
     }
 
     private fun isJavaTypeString(typeName: TypeName): Boolean {
-        return typeName.toString().contains("java.lang.String")
+        return typeName.toString().contains(TYPE_STRING)
     }
+
+    private fun fieldShouldProcess(it: Element) =
+            it.kind == ElementKind.FIELD && it.getAnnotation(Ignore::class.java) == null
 
     private fun getMagnetName(element: Element): String {
         return element.simpleName.toString().plus("Magnet")
@@ -267,6 +284,25 @@ class SourceProcessor : AbstractProcessor() {
 
     private fun getPackageName(element: Element): String {
         return element.asType().asTypeName().toString().replace(".".plus(element.simpleName.toString()), "")
+    }
+
+    private fun getInitValue(element: Element): String {
+        val initAnnotation = element.getAnnotation(Init::class.java)
+        if (initAnnotation != null) return "\"${initAnnotation.value}\""
+
+        var initValue = "null"
+        when (element.asType().asTypeName().toString()) {
+            TYPE_STRING -> initValue = "\"\""
+            TYPE_INT -> initValue = "0"
+            TYPE_FLOAT -> initValue = "0f"
+            TYPE_DOUBLE -> initValue = "0.0"
+            TYPE_LONG -> initValue = "0L"
+            TYPE_BYTE -> initValue = "0"
+            TYPE_CHAR -> initValue = "'\\u0000'"
+            TYPE_BOOLEAN -> initValue = "false"
+        }
+
+        return initValue
     }
 
     /**
